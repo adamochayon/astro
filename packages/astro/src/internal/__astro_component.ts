@@ -25,7 +25,6 @@ async function resolveRenderer(Component: any, props: any = {}, children?: strin
   }
 
   const errors: Error[] = [];
-  console.log(renderers)
   for (const __renderer of renderers) {
     // Yes, we do want to `await` inside of this loop!
     // __renderer.check can't be run in parallel, it
@@ -56,14 +55,28 @@ interface AstroComponentProps {
 }
 
 /** For hydrated components, generate a <script type="module"> to load the component */
-async function generateHydrateScript({ renderer, astroId, props }: any, { hydrate, componentUrl, componentExport }: Required<AstroComponentProps>) {
+async function generateHydrateScript({ Component, renderer, astroId, props }: any, { hydrate, componentUrl, componentExport }: Required<AstroComponentProps>) {
+  if(!componentUrl && !componentExport && renderer.getComponentInfo) {
+    const info = await renderer.getComponentInfo(Component, props);
+    componentUrl = info.url;
+    componentExport = info.export;
+  }
+
   const rendererSource = rendererSources[renderers.findIndex((r) => r === renderer)];
+
+  const hydrationSource = renderer.hydrationMethod === 'self' ?
+    `
+  const { default: hydrate } = await import("${rendererSource}");
+  return (el, children) => hydrate(el, "${componentUrl}")(${serialize(props)}, children);
+`.trim() : `
+  const [{ ${componentExport.value}: Component }, { default: hydrate }] = await Promise.all([import("${componentUrl}"), import("${rendererSource}")]);
+  return (el, children) => hydrate(el)(Component, ${serialize(props)}, children);
+`.trim();
 
   const script = `<script type="module">
 import setup from '/_astro_frontend/hydrate/${hydrate}.js';
 setup("${astroId}", async () => {
-  const [{ ${componentExport.value}: Component }, { default: hydrate }] = await Promise.all([import("${componentUrl}"), import("${rendererSource}")]);
-  return (el, children) => hydrate(el)(Component, ${serialize(props)}, children);
+  ${hydrationSource}
 });
 </script>`;
 
@@ -84,7 +97,6 @@ const getComponentName = (Component: any, componentProps: any) => {
 };
 
 export const __astro_component = (Component: any, componentProps: AstroComponentProps = {} as any) => {
-  console.log("WHA", Component);
   if (Component == null) {
     throw new Error(`Unable to render ${componentProps.displayName} because it is ${Component}!\nDid you forget to import the component or is it possible there is a typo?`);
   } else if (typeof Component === 'string' && !/-/.test(Component)) {
@@ -114,7 +126,7 @@ export const __astro_component = (Component: any, componentProps: AstroComponent
 
     // If we ARE hydrating this component, let's generate the hydration script
     const astroId = hash.unique(html);
-    const script = await generateHydrateScript({ renderer, astroId, props }, componentProps as Required<AstroComponentProps>);
+    const script = await generateHydrateScript({ Component, renderer, astroId, props }, componentProps as Required<AstroComponentProps>);
     const astroRoot = `<astro-root uid="${astroId}">${html}</astro-root>`;
     return [astroRoot, script].join('\n');
   };
