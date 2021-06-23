@@ -16,7 +16,7 @@ export function setRenderers(_rendererSources: string[], _renderers: Renderer[])
   renderers = [astro as Renderer].concat(_renderers);
 }
 
-const rendererCache = new WeakMap();
+const rendererCache = new Map();
 
 /** For a given component, resolve the renderer. Results are cached if this instance is encountered again */
 async function resolveRenderer(Component: any, props: any = {}, children?: string) {
@@ -25,6 +25,7 @@ async function resolveRenderer(Component: any, props: any = {}, children?: strin
   }
 
   const errors: Error[] = [];
+  console.log(renderers)
   for (const __renderer of renderers) {
     // Yes, we do want to `await` inside of this loop!
     // __renderer.check can't be run in parallel, it
@@ -83,9 +84,10 @@ const getComponentName = (Component: any, componentProps: any) => {
 };
 
 export const __astro_component = (Component: any, componentProps: AstroComponentProps = {} as any) => {
+  console.log("WHA", Component);
   if (Component == null) {
     throw new Error(`Unable to render ${componentProps.displayName} because it is ${Component}!\nDid you forget to import the component or is it possible there is a typo?`);
-  } else if (typeof Component === 'string') {
+  } else if (typeof Component === 'string' && !/-/.test(Component)) {
     throw new Error(`Astro is unable to render ${componentProps.displayName}!\nIs there a renderer to handle this type of component defined in your Astro config?`);
   }
 

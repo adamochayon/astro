@@ -13,6 +13,7 @@ interface RendererInstance {
   client: string;
   server: string;
   knownEntrypoints: string[] | undefined;
+  external: string[] | undefined;
 }
 
 const CONFIG_MODULE_BASE_NAME = '__astro_config.js';
@@ -98,6 +99,7 @@ export class ConfigManager {
         client: path.join(name, raw.client),
         server: path.join(name, raw.server),
         knownEntrypoints: raw.knownEntrypoints,
+        external: raw.external
       };
     });
 
