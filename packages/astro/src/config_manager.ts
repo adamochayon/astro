@@ -9,6 +9,7 @@ type RendererSnowpackPlugin = string | [string, any] | undefined;
 
 interface RendererInstance {
   name: string;
+  options: any;
   snowpackPlugin: RendererSnowpackPlugin;
   client: string;
   server: string;
@@ -67,11 +68,17 @@ export class ConfigManager {
     const rendererInstances = (
       await Promise.all(
         rendererNames.map((rendererName) => {
+          let _options: any = null;
+          if (Array.isArray(rendererName)) {
+            _options = rendererName[1];
+            rendererName = rendererName[0];
+          }
+
           const entrypoint = pathToFileURL(resolveDependency(rendererName)).toString();
-          return import(entrypoint);
+          return import(entrypoint).then(r => ({ raw: r.default, options: _options }));
         })
       )
-    ).map(({ default: raw }, i) => {
+    ).map(({ raw, options }, i) => {
       const { name = rendererNames[i], client, server, snowpackPlugin: snowpackPluginName, snowpackPluginOptions } = raw;
 
       if (typeof client !== 'string') {
@@ -95,6 +102,7 @@ export class ConfigManager {
 
       return {
         name,
+        options: _options,
         snowpackPlugin,
         client: path.join(name, raw.client),
         server: path.join(name, raw.server),

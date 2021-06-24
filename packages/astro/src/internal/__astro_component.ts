@@ -1,4 +1,4 @@
-import type { Renderer } from '../@types/astro';
+import type { Renderer, SelectedRenderer } from '../@types/astro';
 import hash from 'shorthash';
 import { valueToEstree, Value } from 'estree-util-value-to-estree';
 import { generate } from 'astring';
@@ -10,13 +10,15 @@ const serialize = (value: Value) => generate(valueToEstree(value));
 
 let rendererSources: string[] = [];
 let renderers: Renderer[] = [];
+let rendererOptions: any[] = [];
 
-export function setRenderers(_rendererSources: string[], _renderers: Renderer[]) {
+export function setRenderers(_rendererSources: string[], _renderers: Renderer[], _rendererOptions: any[]) {
   rendererSources = [''].concat(_rendererSources);
   renderers = [astro as Renderer].concat(_renderers);
+  rendererOptions = [null].concat(_rendererOptions);
 }
 
-const rendererCache = new Map();
+const rendererCache = new Map<any, SelectedRenderer>();
 
 /** For a given component, resolve the renderer. Results are cached if this instance is encountered again */
 async function resolveRenderer(Component: any, props: any = {}, children?: string) {
@@ -25,20 +27,28 @@ async function resolveRenderer(Component: any, props: any = {}, children?: strin
   }
 
   const errors: Error[] = [];
+  let i = 0;
   for (const __renderer of renderers) {
     // Yes, we do want to `await` inside of this loop!
     // __renderer.check can't be run in parallel, it
     // returns the first match and skips any subsequent checks
     try {
-      const shouldUse: boolean = await __renderer.check(Component, props, children);
+      const options = rendererOptions[i];
+      const shouldUse: boolean = await __renderer.check(Component, props, children, options);
 
       if (shouldUse) {
-        rendererCache.set(Component, __renderer);
-        return __renderer;
+        const selectedRenderer = Object.create(__renderer, {
+          options: {
+            value: options
+          }
+        }) as SelectedRenderer;
+        rendererCache.set(Component, selectedRenderer);
+        return selectedRenderer;
       }
     } catch (err) {
       errors.push(err);
     }
+    i++;
   }
 
   if (errors.length) {
@@ -54,10 +64,18 @@ interface AstroComponentProps {
   componentExport?: { value: string; namespace?: boolean };
 }
 
+interface HydrateScriptOptions {
+  Component: string | Function;
+  renderer: SelectedRenderer;
+  astroId: string;
+  props: any;
+  children: string;
+}
+
 /** For hydrated components, generate a <script type="module"> to load the component */
-async function generateHydrateScript({ Component, renderer, astroId, props }: any, { hydrate, componentUrl, componentExport }: Required<AstroComponentProps>) {
+async function generateHydrateScript({ Component, children, renderer, astroId, props }: HydrateScriptOptions, { hydrate, componentUrl, componentExport }: Required<AstroComponentProps>) {
   if(!componentUrl && !componentExport && renderer.getComponentInfo) {
-    const info = await renderer.getComponentInfo(Component, props);
+    const info = await renderer.getComponentInfo(Component, props, children, renderer.options);
     componentUrl = info.url;
     componentExport = info.export;
   }
@@ -110,14 +128,18 @@ export const __astro_component = (Component: any, componentProps: AstroComponent
     if (!renderer) {
       // If the user only specifies a single renderer, but the check failed
       // for some reason... just default to their preferred renderer.
-      renderer = rendererSources.length === 2 ? renderers[1] : null;
+      renderer = rendererSources.length === 2 ? Object.create(renderers[1], {
+        options: {
+          value: rendererOptions[1]
+        }
+      }) as SelectedRenderer : undefined;
 
       if (!renderer) {
         const name = getComponentName(Component, componentProps);
         throw new Error(`No renderer found for ${name}! Did you forget to add a renderer to your Astro config?`);
       }
     }
-    const { html } = await renderer.renderToStaticMarkup(Component, props, children);
+    const { html } = await renderer.renderToStaticMarkup(Component, props, children, renderer.options);
     // If we're NOT hydrating this component, just return the HTML
     if (!componentProps.hydrate) {
       // It's safe to remove <astro-fragment>, static content doesn't need the wrapper
@@ -126,7 +148,7 @@ export const __astro_component = (Component: any, componentProps: AstroComponent
 
     // If we ARE hydrating this component, let's generate the hydration script
     const astroId = hash.unique(html);
-    const script = await generateHydrateScript({ Component, renderer, astroId, props }, componentProps as Required<AstroComponentProps>);
+    const script = await generateHydrateScript({ Component, renderer, children, astroId, props }, componentProps as Required<AstroComponentProps>);
     const astroRoot = `<astro-root uid="${astroId}">${html}</astro-root>`;
     return [astroRoot, script].join('\n');
   };
