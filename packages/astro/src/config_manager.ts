@@ -102,7 +102,7 @@ export class ConfigManager {
 
       return {
         name,
-        options: _options,
+        options,
         snowpackPlugin,
         client: path.join(name, raw.client),
         server: path.join(name, raw.server),
@@ -124,6 +124,7 @@ import { setRenderers } from 'astro/dist/internal/__astro_component.js';
 
 let rendererSources = [${rendererClientPackages.map((pkg) => `"${pkg}"`).join(', ')}];
 let renderers = [${rendererServerPackages.map((_, i) => `__renderer_${i}`).join(', ')}];
+let rendererOptions = [${renderers.map(({ options }) => options ? JSON.stringify(options) : 'null').join(', ')}]
 
 ${contents}
 `;
