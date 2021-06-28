@@ -67,7 +67,7 @@ export class ConfigManager {
 
     const rendererInstances = (
       await Promise.all(
-        rendererNames.map((rendererName) => {
+        rendererNames.map(async (rendererName) => {
           let _options: any = null;
           if (Array.isArray(rendererName)) {
             _options = rendererName[1];
@@ -75,7 +75,11 @@ export class ConfigManager {
           }
 
           const entrypoint = pathToFileURL(resolveDependency(rendererName)).toString();
-          return import(entrypoint).then(r => ({ raw: r.default, options: _options }));
+          const r = await import(entrypoint);
+          return {
+            raw: r.default,
+            options: _options
+          };
         })
       )
     ).map(({ raw, options }, i) => {
@@ -128,6 +132,7 @@ let rendererOptions = [${renderers.map(({ options }) => options ? JSON.stringify
 
 ${contents}
 `;
+
     return result;
   }
 

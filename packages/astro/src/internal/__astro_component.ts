@@ -3,6 +3,7 @@ import hash from 'shorthash';
 import { valueToEstree, Value } from 'estree-util-value-to-estree';
 import { generate } from 'astring';
 import * as astro from './renderer-astro';
+import * as astroHtml from './renderer-html';
 
 // A more robust version alternative to `JSON.stringify` that can handle most values
 // see https://github.com/remcohaszing/estree-util-value-to-estree#readme
@@ -16,6 +17,10 @@ export function setRenderers(_rendererSources: string[], _renderers: Renderer[],
   rendererSources = [''].concat(_rendererSources);
   renderers = [astro as Renderer].concat(_renderers);
   rendererOptions = [null].concat(_rendererOptions);
+}
+
+function isCustomElementTag(name: string | Function) {
+  return typeof name === 'string' && /-/.test(name);
 }
 
 const rendererCache = new Map<any, SelectedRenderer>();
@@ -117,7 +122,7 @@ const getComponentName = (Component: any, componentProps: any) => {
 export const __astro_component = (Component: any, componentProps: AstroComponentProps = {} as any) => {
   if (Component == null) {
     throw new Error(`Unable to render ${componentProps.displayName} because it is ${Component}!\nDid you forget to import the component or is it possible there is a typo?`);
-  } else if (typeof Component === 'string' && !/-/.test(Component)) {
+  } else if (typeof Component === 'string' && !isCustomElementTag(Component)) {
     throw new Error(`Astro is unable to render ${componentProps.displayName}!\nIs there a renderer to handle this type of component defined in your Astro config?`);
   }
 
@@ -126,13 +131,17 @@ export const __astro_component = (Component: any, componentProps: AstroComponent
     let renderer = await resolveRenderer(Component, props, children);
 
     if (!renderer) {
-      // If the user only specifies a single renderer, but the check failed
-      // for some reason... just default to their preferred renderer.
-      renderer = rendererSources.length === 2 ? Object.create(renderers[1], {
-        options: {
-          value: rendererOptions[1]
-        }
-      }) as SelectedRenderer : undefined;
+      if(isCustomElementTag(Component)) {
+        renderer = astroHtml as SelectedRenderer;
+      } else {
+        // If the user only specifies a single renderer, but the check failed
+        // for some reason... just default to their preferred renderer.
+        renderer = rendererSources.length === 2 ? Object.create(renderers[1], {
+          options: {
+            value: rendererOptions[1]
+          }
+        }) as SelectedRenderer : undefined;
+      }
 
       if (!renderer) {
         const name = getComponentName(Component, componentProps);
