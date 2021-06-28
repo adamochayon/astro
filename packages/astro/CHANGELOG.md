@@ -1,5 +1,11 @@
 # astro
 
+## 0.15.2
+
+### Patch Changes
+
+- aa86057: Updates collections to match URLs by exact template filename
+
 ## 0.15.1
 
 ### Patch Changes
